@@ -2,6 +2,7 @@
 #include <cstdlib>
 #include <sstream>
 #include <fstream>
+#include <iomanip>
 
 #define stateFile "state.txt"
 #define colorFile "color.txt"
@@ -312,34 +313,187 @@ void add_color(connection *C, string name) {
     }
 }
 
+template<typename T>
+string query1Helper(string attribute, T minValue, T maxValue, bool first) {
+    stringstream ss;
+    
+    if (!first)
+        ss << " and ";
+    else
+        ss << " where ";
+    
+    ss << attribute << " between " << minValue << " and " << maxValue;
+    return ss.str();
+}
 
+// show all attributes of each player with average statistics that fall between the
+// min and max (inclusive) for each enabled statistic
 void query1(connection *C,
-	    int use_mpg, int min_mpg, int max_mpg,
+	        int use_mpg, int min_mpg, int max_mpg,
             int use_ppg, int min_ppg, int max_ppg,
             int use_rpg, int min_rpg, int max_rpg,
             int use_apg, int min_apg, int max_apg,
             int use_spg, double min_spg, double max_spg,
             int use_bpg, double min_bpg, double max_bpg
-            )
-{
+            ) {
+    // get query
+    stringstream ss;
+    ss << "select * from player";
+
+    bool first = true;
+    if (use_mpg) {
+        ss << query1Helper<int>("mpg", min_mpg, max_mpg, first);
+        first = false;
+    }
+    if (use_ppg) {
+        ss << query1Helper<int>("ppg", min_ppg, max_ppg, first);
+        first = false;
+    }
+    if (use_rpg) {
+        ss << query1Helper<int>("rpg", min_rpg, max_rpg, first);
+        first = false;
+    }
+    if (use_apg) {
+        ss << query1Helper<int>("apg", min_apg, max_apg, first);
+        first = false;
+    }
+    if (use_spg) {
+        ss << query1Helper<double>("spg", min_spg, max_spg, first);
+        first = false;
+    }
+    if (use_bpg) {
+        ss << query1Helper<double>("bpg", min_bpg, max_bpg, first);
+        first = false;
+    }
+    
+    ss << ";";
+
+    nontransaction N(*C);
+    
+    try {
+        /* Execute SQL query */
+        result R(N.exec(ss.str()));
+        
+        /* List down all the records */
+        cout << "PLAYER_ID TEAM_ID UNIFORM_NUM FIRST_NAME LAST_NAME MPG PPG RPG APG SPG BPG\n";
+        for (result::const_iterator c = R.begin(); c != R.end(); ++c) {
+            std::ios_base::fmtflags f(cout.flags());
+
+            cout << c[0].as<int>() << ' ' << c[1].as<int>() << ' ' << c[2].as<int>() << ' ' <<
+            c[3].as<string>() << ' ' << c[4].as<string>() << ' ' << c[5].as<int>() << ' ' <<
+            c[6].as<int>() << ' ' << c[7].as<int>() << ' ' << c[8].as<int>() << ' ' <<
+            fixed << setprecision(2) << c[9].as<double>() << ' ' << c[10].as<double>() << endl;
+
+            cout.flags(f);
+        }
+    }
+    catch(const std::exception& e) {
+        std::cerr << e.what() << '\n';
+        exit(EXIT_FAILURE);
+    }
 }
 
+//  show the name of each team with the indicated uniform color
+void query2(connection *C, string team_color) {
+    // get query
+    stringstream ss;
+    ss << "select t.name from team as t, color as c where t.color_id = c.color_id and c.name = ";
+    ss << "'" << team_color << "'" << ';';
 
-void query2(connection *C, string team_color)
-{
+    nontransaction N(*C);
+    
+    try {
+        /* Execute SQL query */
+        result R(N.exec(ss.str()));
+        
+        /* List down all the records */
+        cout << "NAME\n";
+        for (result::const_iterator c = R.begin(); c != R.end(); ++c) {
+            cout << c[0].as<string>() << endl;
+        }
+    }
+    catch(const std::exception& e) {
+        std::cerr << e.what() << '\n';
+        exit(EXIT_FAILURE);
+    }
 }
 
+// show the first and last name of each player that plays for the indicated team,
+// ordered from highest to lowest ppg (points per game)
+void query3(connection *C, string team_name) {
+    // get query
+    stringstream ss;
+    ss << "select p.first_name, p.last_name from player as p, team as t where p.team_id = t.team_id" <<
+    " and t.name = '" << team_name << "' order by p.ppg desc" << ';';
 
-void query3(connection *C, string team_name)
-{
+    nontransaction N(*C);
+    
+    try {
+        /* Execute SQL query */
+        result R(N.exec(ss.str()));
+        
+        /* List down all the records */
+        cout << "FIRST_NAME LAST_NAME\n";
+        for (result::const_iterator c = R.begin(); c != R.end(); ++c) {
+            cout << c[0].as<string>() << ' ' << c[1].as<string>() << endl;
+        }
+    }
+    catch(const std::exception& e) {
+        std::cerr << e.what() << '\n';
+        exit(EXIT_FAILURE);
+    }
 }
 
+// show first name, last name, and jersey number of each player that plays in the
+// indicated state and wears the indicated uniform color
+void query4(connection *C, string team_state, string team_color) {
+    // get query
+    stringstream ss;
+    ss << "select p.first_name, p.last_name, p.uniform_num from player as p, team as t, state as s, color as c" <<
+    " where p.team_id = t.team_id and t.state_id = s.state_id and t.color_id = c.color_id" <<
+    " and s.name = '" << team_state << "'" << " and c.name = '" << team_color << "';";
 
-void query4(connection *C, string team_state, string team_color)
-{
+    nontransaction N(*C);
+    
+    try {
+        /* Execute SQL query */
+        result R(N.exec(ss.str()));
+        
+        /* List down all the records */
+        cout << "FIRST_NAME LAST_NAME UNIFORM_NUM\n";
+        for (result::const_iterator c = R.begin(); c != R.end(); ++c) {
+            cout << c[0].as<string>() << ' ' << c[1].as<string>() << ' ' << c[2].as<int>() << endl;
+        }
+    }
+    catch(const std::exception& e) {
+        std::cerr << e.what() << '\n';
+        exit(EXIT_FAILURE);
+    }
 }
 
+// show first name and last name of each player, and team name and number of
+// wins for each team that has won more than the indicated number of games
+void query5(connection *C, int num_wins) {
+    // get query
+    stringstream ss;
+    ss << "select p.first_name, p.last_name, t.name, t.wins from player as p, team as t" <<
+    " where p.team_id = t.team_id" << " and t.wins > " << num_wins << ';';
 
-void query5(connection *C, int num_wins)
-{
+    nontransaction N(*C);
+    
+    try {
+        /* Execute SQL query */
+        result R(N.exec(ss.str()));
+        
+        /* List down all the records */
+        cout << "FIRST_NAME LAST_NAME NAME WINS\n";
+        for (result::const_iterator c = R.begin(); c != R.end(); ++c) {
+            cout << c[0].as<string>() << ' ' << c[1].as<string>() << ' ' << c[2].as<string>() << ' ' <<
+            c[3].as<int>() << endl;
+        }
+    }
+    catch(const std::exception& e) {
+        std::cerr << e.what() << '\n';
+        exit(EXIT_FAILURE);
+    }
 }

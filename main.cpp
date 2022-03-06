@@ -38,7 +38,6 @@ int main (int argc, char *argv[])
 	// for testing
     exercise(C);
 
-
     //Close database connection
     C->disconnect();
 
